@@ -1,14 +1,23 @@
 ﻿  rsa64.c
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(31): warning C4244: 'function': conversion from 'unsigned __int64' to 'double', possible loss of data
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(109): warning C4244: 'function': conversion from 'time_t' to 'unsigned int', possible loss of data
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(193): warning C4244: '=': conversion from 'unsigned __int64' to 'char', possible loss of data
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(208): warning C4244: 'function': conversion from '__int64' to '::size_t', possible loss of data
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(217): warning C4244: 'function': conversion from '__int64' to '::size_t', possible loss of data
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(207): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(37): warning C4244: '=': conversion from 'unsigned __int64' to 'char', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(47): warning C4244: 'function': conversion from 'unsigned __int64' to 'double', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(125): warning C4244: 'function': conversion from 'time_t' to 'unsigned int', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(209): warning C4244: '=': conversion from 'unsigned __int64' to 'char', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(224): warning C4244: 'function': conversion from '__int64' to '::size_t', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(233): warning C4244: 'function': conversion from '__int64' to '::size_t', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(246): warning C4244: 'function': conversion from '__int64' to '::size_t', possible loss of data
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(223): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
   c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(207): note: see declaration of 'fopen'
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(214): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(230): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
   c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(1195): note: see declaration of 'fscanf'
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(253): warning C4013: 'strlen' undefined; assuming extern returning int
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(320): warning C4013: 'getch' undefined; assuming extern returning int
-c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(97): warning C4715: 'rsa_modExp': not all control paths return a value
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(325): warning C4013: 'getch' undefined; assuming extern returning int
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(278): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(207): note: see declaration of 'fopen'
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(306): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(207): note: see declaration of 'fopen'
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(307): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(207): note: see declaration of 'fopen'
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(314): warning C4996: 'fscanf': This function or variable may be unsafe. Consider using fscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\ucrt\stdio.h(1195): note: see declaration of 'fscanf'
+c:\users\jozef\source\repos\rsa64_for_cpu\rsa64_for_cpu\rsa64.c(113): warning C4715: 'rsa_modExp': not all control paths return a value
   RSA64_for_CPU.vcxproj -> C:\Users\Jozef\source\repos\RSA64_for_CPU\Debug\RSA64_for_CPU.exe

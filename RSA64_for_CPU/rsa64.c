@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
 
 //#define MAX_DIGITS 50
 
@@ -22,8 +23,23 @@ void print_hex(char* arr, int len)
 	int i;
 	for (i = 0; i < len; i++)
 		printf("%02x", (unsigned char)arr[i]);
+	printf("\n");
 }
 
+char *strToInt(int bufSize, unsigned long long decrypted) {
+	
+	char *decMsg;
+	decMsg = malloc((bufSize + 1) * sizeof(char));
+	unsigned long long int temp;
+	for (int i = 3; i >= 0; i--) {
+		temp = decrypted >> 8;
+		temp = temp << 8;
+		decMsg[i] = decrypted - temp;
+		decrypted = decrypted >> 8;
+	}
+	decMsg[bufSize] = '\0';
+	return decMsg;
+}
 
 int checkPrime(unsigned long long n) {
 	if (n % 2 == 0)
@@ -201,23 +217,23 @@ char *rsa_decrypt(const long long *message, const unsigned long message_size, co
 	return decrypted;
 }
 
-char *inputString(long long *size) {
+char *inputString(long long bufSize, long long *numBlocks) {
 	FILE *input;
 	char c, *temp, *message;
 	input = fopen("input.txt", "r");
-	message = malloc(sizeof(char)* (*size));
+	message = malloc(sizeof(char)* bufSize);
 	if (!message) {
 		printf("Error: Heap allocation failed.\n");
 		return NULL;
 	}
-	int len = 0;
+	int len = 0, blockidx = 0;
 	while (fscanf(input, "%c", &c) != EOF) {
-		message[len++] = c;
-		if (len == *size) {
-			temp = realloc(message, sizeof(char)*(*size * 2));
+		*(message + blockidx * bufSize + len++) = c;
+		if (len == bufSize) {
+			temp = realloc(message, sizeof(char) * bufSize * (++blockidx + 1));
 			if (temp) {
 				message = temp;
-				(*size) *= 2;
+				len = 0;
 			}
 			else {
 				printf("Message reallocation failed!\n");
@@ -226,16 +242,16 @@ char *inputString(long long *size) {
 		}
 	}
 	fclose(input);
-	message[len++] = '\0';
-	temp = realloc(message, sizeof(char) * len);
+	*(message + blockidx * bufSize + len++) = '\0';
+	temp = realloc(message, sizeof(char) * (bufSize * (blockidx + 1) + len));
 	if (temp) {
 		message = temp;
-		*size = len;
 	}
 	else {
 		printf("Message reallocation failed!\n");
 		return NULL;
 	}
+	*numBlocks = blockidx + 1;
 	return message;
 }
 
@@ -243,80 +259,69 @@ int main() {
 	struct public_key pub[1];
 	struct private_key priv[1];
 	int modSize = 32, bufSize = modSize/8;
-	int i;
-	long long *size;
-	size = malloc(sizeof(long long));
+	int i, j;
+	long long numBlocks = 0;
 
 	rsa_gen_keys(pub, priv, modSize);
 
-	char message[] = "Hello world!\nHow are you today, mate?";
-	*size = strlen(message);
-
-	char *buf;
-	buf = (char*)malloc(bufSize * sizeof(char));
-	for (i = 0; i < bufSize; i++) {
-		buf[i] = message[i];
-	}
-	print_hex(buf, bufSize);
-	unsigned long long temp = buf[0];
-	for (i = 1; i < bufSize; i++) {
-		temp = temp << 8;
-		temp += buf[i];
-	}
-	printf("\nMessage is %llu\n", temp);
-	unsigned long long encrypted = rsa_modExp(temp, pub->e, pub->n);
-	printf("Encrypted: %llu\n", encrypted);
-	unsigned long long decrypted = rsa_modExp(encrypted, priv->d, priv->n);
-	printf("Decrypted: %llu\n", decrypted);
-
-	/*char *message;
-	*size = 100;
-	message = inputString(size);
+	char *message;
+	message = inputString(bufSize, &numBlocks);
 	if (message == NULL) {
 		printf("Message read failed!\n");
 		exit(1);
 	}
-	printf("size is: %d\n", *size);*/
 
-	/*printf("Original:\n");
-	for (i = 0; i < strlen(message); i++) {
-	printf("%lld ", (long long)message[i]);
+	char *buf;
+	unsigned long long encrypted, tempNumber;
+	int flag = 0;
+	FILE *cipher;
+	cipher = fopen("cipher.txt", "w");
+	for (i = 0; i < numBlocks; i++) {
+		buf = (char*)malloc((i + 1) * bufSize * sizeof(char));
+		for (j = 0; j < bufSize; j++) {
+			if (!flag)
+				buf[j] = *(message + i * bufSize + j);
+			else
+				buf[j] = '\0';
+			if (buf[j] == '\0')
+				flag = 1;
+		}
+		//print_hex(buf, bufSize);
+		tempNumber = buf[0];
+		for (j = 1; j < bufSize; j++) {
+			tempNumber = tempNumber << 8;
+			tempNumber += buf[j];
+		}
+		//printf("%d. Message is %llu\n", i+1, tempNumber);
+		encrypted = rsa_modExp(tempNumber, pub->e, pub->n);
+		//printf("Encrypted: %llu\n", encrypted);
+		fprintf(cipher, "%llu ", encrypted);
+		free(buf);
 	}
-	printf("\n");*/
+	fclose(cipher);
+	//printf("\n");
+	printf("Encryption done\n");
 
-	/*clock_t begin = clock();
-	long long *encrypted = rsa_encrypt(message, *size, pub);
-	if (!encrypted) {
-		printf("Error in encryption!\n");
-		return 1;
+	FILE *output;
+	output = fopen("output.txt", "w");
+	cipher = fopen("cipher.txt", "r");
+	char *result, *msg;
+	unsigned long long int cipherMsg, decrypted;
+	result = malloc(sizeof(char) * bufSize);
+	msg = malloc(sizeof(char) * bufSize);
+	result[0] = '\0';
+	for(i = 0; i < numBlocks; i++){
+		fscanf(cipher, "%llu", &cipherMsg);
+		decrypted = rsa_modExp(cipherMsg, priv->d, priv->n);
+		//printf("Decrypted: %llu\n", decrypted);
+		msg = strToInt(bufSize, decrypted);
+		//strcat(result, msg);
+		fprintf(output, "%s", msg);
 	}
-	clock_t end = clock();
-	double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-	printf("\nEncryption took %lf seconds.\n", time_spent);
-	printf("Encrypted:\n");
-	for (i = 0; i < strlen(message); i++) {
-	printf("%lld ", (long long)encrypted[i]);
-	}
-	printf("\n");
+	fclose(cipher);
+	fclose(output);
 
-	begin = clock();
-	char *decrypted = rsa_decrypt(encrypted, 8 * *size, priv);
-	if (!decrypted) {
-		printf("Error in decryption!\n");
-		return 1;
-	}
-	end = clock();
-	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-	printf("Decryption took %lf seconds.\n", time_spent);
-	printf("Decrypted:\n");
-	for (i = 0; i < strlen(message); i++) {
-	printf("%lld ", (long long)decrypted[i]);
-	}
-	printf("\n");
-
-	free(encrypted);
-	free(decrypted);*/
-
+	printf("Decryption done\n");
 	getch();
 	return 0;
 }
