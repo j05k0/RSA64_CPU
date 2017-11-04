@@ -4,8 +4,6 @@
 #include <math.h>
 #include <string.h>
 
-//#define MAX_DIGITS 50
-
 struct public_key {
 	unsigned long long n;
 	unsigned long long e;
@@ -27,11 +25,11 @@ void print_hex(char* arr, int len)
 }
 
 char *strToInt(int bufSize, unsigned long long decrypted) {
-	
+	int i;
 	char *decMsg;
 	decMsg = malloc((bufSize + 1) * sizeof(char));
 	unsigned long long int temp;
-	for (int i = 3; i >= 0; i--) {
+	for (i = 3; i >= 0; i--) {
 		temp = decrypted >> 8;
 		temp = temp << 8;
 		decMsg[i] = decrypted - temp;
@@ -42,9 +40,10 @@ char *strToInt(int bufSize, unsigned long long decrypted) {
 }
 
 int checkPrime(unsigned long long n) {
+	int i;
 	if (n % 2 == 0)
 		return 1;
-	for (int i = 3; i <= sqrt(n); i+=2)
+	for (i = 3; i <= sqrt(n); i+=2)
 	{
 		// podmienka pre neprvocislo
 		if (n % i == 0)
@@ -121,7 +120,6 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 	buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char) + 1);
 
 	pub->e = 65537;
-	//pub->e = 17;
 	srand(time(NULL));
 	
 	do {
@@ -255,14 +253,74 @@ char *inputString(long long bufSize, long long *numBlocks) {
 	return message;
 }
 
-int main() {
+void help(char *argv) {
+	FILE *help;
+	char input;
+	help = fopen("help.txt", "r");
+	while (fscanf(help, "%c", &input) != EOF) {
+		printf("%c", input);
+		/*if (!strcmp(input, "Pouzitie:")) {
+			printf("%s ", argv);
+		}*/
+	}
+	fclose(help);
+}
+
+int main(int argc, char **argv) {
 	struct public_key pub[1];
 	struct private_key priv[1];
-	int modSize = 32, bufSize = modSize/8;
+	int modSize = 32, bufSize = modSize / 8;
 	int i, j;
 	long long numBlocks = 0;
 
-	rsa_gen_keys(pub, priv, modSize);
+	if (argc > 1) {
+		int i;
+		for (i = 1; i < argc; i++) {
+			if (!strcmp(argv[i], "-h")) {
+				help(argv[0]);
+			}
+			else if (!strcmp(argv[i], "-g")) {
+				rsa_gen_keys(pub, priv, modSize);
+				i++;
+				char *filename1, *filename2;
+				if (i < argc) {
+					filename1 = (char*)malloc((strlen(argv[i]) + 1) * sizeof(char));
+					filename2 = (char*)malloc((strlen(argv[i]) + 5) * sizeof(char));
+					filename1[0] = '\0';
+					filename2[0] = '\0';
+					strcat(filename1, argv[i]);
+					strcat(filename2, filename1);
+					strcat(filename2, ".pub");
+				}
+				else {
+					filename1 = (char*)malloc(7 * sizeof(char));
+					filename2 = (char*)malloc(11 * sizeof(char));
+					filename1[0] = '\0';
+					filename2[0] = '\0';
+					strcat(filename1, "rsakey");
+					strcat(filename2, filename1);
+					strcat(filename2, ".pub");
+				}
+				printf("Ukladam kluce do suborov %s and %s...\n", filename1, filename2);
+				FILE *keyFile;
+				keyFile = fopen(filename1, "w");
+				fprintf(keyFile, "%llu %llu %llu %llu", priv->n, priv->d, priv->p, priv->q);
+				fclose(keyFile);
+				keyFile = fopen(filename2, "w");
+				fprintf(keyFile, "%llu %llu", pub->n, pub->e);
+				fclose(keyFile);
+			}
+			else {
+				printf("%s is a wrong argument, try again, or use -h for help.\n", argv[i]);
+				return 0;
+			}
+		}
+		return 0;
+	}
+	else {
+		printf("Too few arguments, try again, or use -h for help.\n");
+		return 0;
+	}
 
 	char *message;
 	message = inputString(bufSize, &numBlocks);
