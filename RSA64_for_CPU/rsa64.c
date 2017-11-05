@@ -173,52 +173,73 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 	printf("q is [%llu]\n", priv->q);
 }
 
-long long *rsa_encrypt(const char *message, const unsigned long message_size, const struct public_key *pub)
+void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks, int bufSize, char *message, char *cipher)
 {
-	long long *encrypted = malloc(sizeof(long long)*message_size);
-	if (encrypted == NULL) {
-		printf("Error: Heap allocation failed.\n");
-		return NULL;
+	int i, j;
+	char *buf;
+	unsigned long long encrypted, tempNumber;
+	int flag = 0;
+	if (cipher == NULL) {
+		cipher = "cipher.txt";
 	}
-	long long i = 0;
-	for (i = 0; i < message_size; i++) {
-		encrypted[i] = rsa_modExp(message[i], pub->e, pub->n);
+	FILE *cipher_file;
+	cipher_file = fopen(cipher, "w");
+	for (i = 0; i < numBlocks; i++) {
+		buf = (char*)malloc((i + 1) * bufSize * sizeof(char));
+		for (j = 0; j < bufSize; j++) {
+			if (!flag)
+				buf[j] = *(message + i * bufSize + j);
+			else
+				buf[j] = '\0';
+			if (buf[j] == '\0')
+				flag = 1;
+		}
+		//print_hex(buf, bufSize);
+		tempNumber = buf[0];
+		for (j = 1; j < bufSize; j++) {
+			tempNumber = tempNumber << 8;
+			tempNumber += buf[j];
+		}
+		//printf("%d. Message is %llu\n", i+1, tempNumber);
+		encrypted = rsa_modExp(tempNumber, e, n);
+		//printf("Encrypted: %llu\n", encrypted);
+		fprintf(cipher_file, "%llu ", encrypted);
+		free(buf);
 	}
-	return encrypted;
+	fclose(cipher_file);
+	//printf("\n");
+	printf("Sifrovanie dokoncene. Sifra je ulozena v subore %s.\n", cipher);
 }
 
-char *rsa_decrypt(const long long *message, const unsigned long message_size, const struct private_key *priv)
+void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *cipher, char *output)
 {
-	if (message_size % sizeof(long long) != 0) {
-		printf("Error: message_size is not divisible by %d, so cannot be output of rsa_encrypt\n", (int)sizeof(long long));
-		return NULL;
+	if (output == NULL) {
+		output = "output.txt";
 	}
-	// We allocate space to do the decryption (temp) and space for the output as a char array
-	// (decrypted)
-	char *decrypted = malloc(message_size / sizeof(long long));
-	char *temp = malloc(message_size);
-	if ((decrypted == NULL) || (temp == NULL)) {
-		printf("Error: Heap allocation failed.\n");
-		return NULL;
+	int i;
+	FILE *output_file, *cipher_file;
+	output_file = fopen(output, "w");
+	cipher_file = fopen(cipher, "r");
+	char *result, *msg;
+	unsigned long long int cipherMsg, decrypted;
+	result = malloc(sizeof(char) * bufSize);
+	msg = malloc(sizeof(char) * bufSize);
+	result[0] = '\0';
+	while(fscanf(cipher_file, "%llu", &cipherMsg) != EOF)  {
+		decrypted = rsa_modExp(cipherMsg, d, n);
+		//printf("Decrypted: %llu\n", decrypted);
+		msg = strToInt(bufSize, decrypted);
+		fprintf(output_file, "%s", msg);
 	}
-	// Now we go through each 8-byte chunk and decrypt it.
-	long long i = 0;
-	for (i = 0; i < message_size / 8; i++) {
-		temp[i] = rsa_modExp(message[i], priv->d, priv->n);
-	}
-	// The result should be a number in the char range, which gives back the original byte.
-	// We put that into decrypted, then return.
-	for (i = 0; i < message_size / 8; i++) {
-		decrypted[i] = temp[i];
-	}
-	free(temp);
-	return decrypted;
+	fclose(cipher_file);
+	fclose(output_file);
+	printf("Desifrovanie dokoncene. Vystup je ulozeny v subore %s.\n", output);
 }
 
-char *inputString(long long bufSize, long long *numBlocks) {
+char *inputString(char *inputFile, long long bufSize, long long *numBlocks) {
 	FILE *input;
 	char c, *temp, *message;
-	input = fopen("input.txt", "r");
+	input = fopen(inputFile, "r");
 	message = malloc(sizeof(char)* bufSize);
 	if (!message) {
 		printf("Error: Heap allocation failed.\n");
@@ -259,9 +280,6 @@ void help(char *argv) {
 	help = fopen("help.txt", "r");
 	while (fscanf(help, "%c", &input) != EOF) {
 		printf("%c", input);
-		/*if (!strcmp(input, "Pouzitie:")) {
-			printf("%s ", argv);
-		}*/
 	}
 	fclose(help);
 }
@@ -274,16 +292,16 @@ int main(int argc, char **argv) {
 	long long numBlocks = 0;
 
 	if (argc > 1) {
-		int i;
 		for (i = 1; i < argc; i++) {
 			if (!strcmp(argv[i], "-h")) {
 				help(argv[0]);
+				return 0;
 			}
 			else if (!strcmp(argv[i], "-g")) {
 				rsa_gen_keys(pub, priv, modSize);
 				i++;
 				char *filename1, *filename2;
-				if (i < argc) {
+				if (i < argc && strcmp(argv[i], "-e") != 0) {
 					filename1 = (char*)malloc((strlen(argv[i]) + 1) * sizeof(char));
 					filename2 = (char*)malloc((strlen(argv[i]) + 5) * sizeof(char));
 					filename1[0] = '\0';
@@ -293,6 +311,7 @@ int main(int argc, char **argv) {
 					strcat(filename2, ".pub");
 				}
 				else {
+					i--;
 					filename1 = (char*)malloc(7 * sizeof(char));
 					filename2 = (char*)malloc(11 * sizeof(char));
 					filename1[0] = '\0';
@@ -301,7 +320,6 @@ int main(int argc, char **argv) {
 					strcat(filename2, filename1);
 					strcat(filename2, ".pub");
 				}
-				printf("Ukladam kluce do suborov %s and %s...\n", filename1, filename2);
 				FILE *keyFile;
 				keyFile = fopen(filename1, "w");
 				fprintf(keyFile, "%llu %llu %llu %llu", priv->n, priv->d, priv->p, priv->q);
@@ -309,79 +327,104 @@ int main(int argc, char **argv) {
 				keyFile = fopen(filename2, "w");
 				fprintf(keyFile, "%llu %llu", pub->n, pub->e);
 				fclose(keyFile);
+				printf("Kluce boli ulozene do suborov %s and %s...\n", filename1, filename2);
+			}
+			else if (!strcmp(argv[i], "-e") || !strcmp(argv[i], "-d")) {
+				i++;
+				if (i < argc) {
+					FILE *key;
+					key = fopen(argv[i], "r");
+					int flag = 0;
+					if (strstr(argv[i], ".pub") != NULL) {
+						if (fscanf(key, "%llu", &pub->n) != EOF) {
+							if (fscanf(key, "%llu", &pub->e) != EOF) {
+								printf("Nacitane kluce:\nn: %llu\ne: %llu\n", pub->n, pub->e);
+							}
+							else {
+								printf("Zly vstupny subor s klucom!\n");
+								return 0;
+							}
+						}
+						else {
+							printf("Zly vstupny subor s klucom!\n");
+							return 0;
+						}
+					}
+					else {
+						flag = 1;
+						if (fscanf(key, "%llu", &priv->n) != EOF) {
+							if (fscanf(key, "%llu", &priv->d) != EOF) {
+								printf("Nacitane kluce:\nn: %llu\nd: %llu\n", priv->n, priv->d);
+							}
+						}
+					}
+					fclose(key);
+					i++;
+					if (argv[i] == NULL) {
+						printf("Nebol zadany vstupny subor!\n");
+						return 0;
+					}
+					char *output;
+					if (argv[i + 1] != NULL) {
+						output = (char*)malloc(strlen(argv[i + 1]) * sizeof(char));
+						strcpy(output, argv[i + 1]);
+					}
+					else {
+						output = NULL;
+					}
+					if (!strcmp(argv[i - 2], "-e")) {
+						char *message;
+						message = inputString(argv[i], bufSize, &numBlocks);
+						if (message == NULL) {
+							printf("Chyba pri citani do pamate!\n");
+							exit(1);
+						}
+						if (flag) {
+							rsa_encrypt(priv->d, priv->n, numBlocks, bufSize, message, output);
+							return 0;
+						}
+						rsa_encrypt(pub->e, pub->n, numBlocks, bufSize, message, output);
+					}
+					else {
+						char *cipher;
+						cipher = (char*)malloc(strlen(argv[i]) * sizeof(char));
+						strcpy(cipher, argv[i]);
+						if (flag) {
+							rsa_decrypt(priv->d, priv->n, bufSize, cipher, output);
+							return 0;
+						}
+						rsa_decrypt(pub->e, pub->n, bufSize, cipher, output);
+					}
+				}
+				else {
+					printf("Chyba subor s klucom!\n");
+					return 0;
+				}
+			}
+			//in progress----
+			else if (!strcmp(argv[i], "-s")) {
+				i++;
+				char *text;
+				for (i; i<argc; i++) {
+					text = (char*)malloc(strlen(argv[i]) * sizeof(char));
+					strcpy(text, argv[i]);
+					unsigned long long len = strlen(text);
+					
+					free(text);
+				}
+				return 0;
 			}
 			else {
-				printf("%s is a wrong argument, try again, or use -h for help.\n", argv[i]);
+				printf("%s je zly argument, skus znova alebo pouzi -h pre pomoc.\n", argv[i]);
 				return 0;
 			}
 		}
 		return 0;
 	}
 	else {
-		printf("Too few arguments, try again, or use -h for help.\n");
+		printf("Malo argumentov, skus znova alebo pouzi -h pre pomoc.\n");
 		return 0;
 	}
-
-	char *message;
-	message = inputString(bufSize, &numBlocks);
-	if (message == NULL) {
-		printf("Message read failed!\n");
-		exit(1);
-	}
-
-	char *buf;
-	unsigned long long encrypted, tempNumber;
-	int flag = 0;
-	FILE *cipher;
-	cipher = fopen("cipher.txt", "w");
-	for (i = 0; i < numBlocks; i++) {
-		buf = (char*)malloc((i + 1) * bufSize * sizeof(char));
-		for (j = 0; j < bufSize; j++) {
-			if (!flag)
-				buf[j] = *(message + i * bufSize + j);
-			else
-				buf[j] = '\0';
-			if (buf[j] == '\0')
-				flag = 1;
-		}
-		//print_hex(buf, bufSize);
-		tempNumber = buf[0];
-		for (j = 1; j < bufSize; j++) {
-			tempNumber = tempNumber << 8;
-			tempNumber += buf[j];
-		}
-		//printf("%d. Message is %llu\n", i+1, tempNumber);
-		encrypted = rsa_modExp(tempNumber, pub->e, pub->n);
-		//printf("Encrypted: %llu\n", encrypted);
-		fprintf(cipher, "%llu ", encrypted);
-		free(buf);
-	}
-	fclose(cipher);
-	//printf("\n");
-	printf("Encryption done\n");
-
-	FILE *output;
-	output = fopen("output.txt", "w");
-	cipher = fopen("cipher.txt", "r");
-	char *result, *msg;
-	unsigned long long int cipherMsg, decrypted;
-	result = malloc(sizeof(char) * bufSize);
-	msg = malloc(sizeof(char) * bufSize);
-	result[0] = '\0';
-	for(i = 0; i < numBlocks; i++){
-		fscanf(cipher, "%llu", &cipherMsg);
-		decrypted = rsa_modExp(cipherMsg, priv->d, priv->n);
-		//printf("Decrypted: %llu\n", decrypted);
-		msg = strToInt(bufSize, decrypted);
-		//strcat(result, msg);
-		fprintf(output, "%s", msg);
-	}
-	fclose(cipher);
-	fclose(output);
-
-	printf("Decryption done\n");
-	getch();
-	return 0;
 }
 
 
