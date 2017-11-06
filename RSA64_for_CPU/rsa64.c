@@ -236,17 +236,23 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 	printf("Desifrovanie dokoncene. Vystup je ulozeny v subore %s.\n", output);
 }
 
-char *inputString(char *inputFile, long long bufSize, long long *numBlocks) {
-	FILE *input;
+char *inputString(int flag, char *input, long long bufSize, long long *numBlocks) {
+	FILE *input_file;
+	int i = 0;
 	char c, *temp, *message;
-	input = fopen(inputFile, "r");
+	if (!flag) {
+		input_file = fopen(input, "r");
+	}
 	message = malloc(sizeof(char)* bufSize);
 	if (!message) {
 		printf("Error: Heap allocation failed.\n");
 		return NULL;
 	}
 	int len = 0, blockidx = 0;
-	while (fscanf(input, "%c", &c) != EOF) {
+	while (!flag && fscanf(input_file, "%c", &c) != EOF || flag && input[i] != '\0') {
+		if (flag) {
+			c = input[i++];
+		}
 		*(message + blockidx * bufSize + len++) = c;
 		if (len == bufSize) {
 			temp = realloc(message, sizeof(char) * bufSize * (++blockidx + 1));
@@ -260,7 +266,9 @@ char *inputString(char *inputFile, long long bufSize, long long *numBlocks) {
 			}
 		}
 	}
-	fclose(input);
+	if (!flag) {
+		fclose(input_file);
+	}
 	*(message + blockidx * bufSize + len++) = '\0';
 	temp = realloc(message, sizeof(char) * (bufSize * (blockidx + 1) + len));
 	if (temp) {
@@ -365,16 +373,37 @@ int main(int argc, char **argv) {
 						return 0;
 					}
 					char *output;
-					if (argv[i + 1] != NULL) {
-						output = (char*)malloc(strlen(argv[i + 1]) * sizeof(char));
-						strcpy(output, argv[i + 1]);
+					if (!strcmp(argv[i], "-s")) {
+						if (argv[i + 1] == NULL) {
+							printf("Nebol zadany ziadny vstupny retazec!\n");
+							return 0;
+						}
+						if (argv[i + 2] != NULL) {
+							output = (char*)malloc(strlen(argv[i + 1]) * sizeof(char));
+							strcpy(output, argv[i + 1]);
+						}
+						else {
+							output = NULL;
+						}
 					}
 					else {
-						output = NULL;
+						if (argv[i + 1] != NULL) {
+							output = (char*)malloc(strlen(argv[i + 1]) * sizeof(char));
+							strcpy(output, argv[i + 1]);
+						}
+						else {
+							output = NULL;
+						}
 					}
 					if (!strcmp(argv[i - 2], "-e")) {
 						char *message;
-						message = inputString(argv[i], bufSize, &numBlocks);
+						if (!strcmp(argv[i], "-s")) {
+							i++;
+							message = inputString(1, argv[i], bufSize, &numBlocks);
+						}
+						else {
+							message = inputString(0, argv[i], bufSize, &numBlocks);
+						}
 						if (message == NULL) {
 							printf("Chyba pri citani do pamate!\n");
 							exit(1);
@@ -400,19 +429,6 @@ int main(int argc, char **argv) {
 					printf("Chyba subor s klucom!\n");
 					return 0;
 				}
-			}
-			//in progress----
-			else if (!strcmp(argv[i], "-s")) {
-				i++;
-				char *text;
-				for (i; i<argc; i++) {
-					text = (char*)malloc(strlen(argv[i]) * sizeof(char));
-					strcpy(text, argv[i]);
-					unsigned long long len = strlen(text);
-					
-					free(text);
-				}
-				return 0;
 			}
 			else {
 				printf("%s je zly argument, skus znova alebo pouzi -h pre pomoc.\n", argv[i]);
