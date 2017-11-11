@@ -202,20 +202,25 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 			if (buf[j] == '\0')
 				flag = 1;
 		}
-		//print_hex(buf, bufSize);
+		if (debug) {
+			print_hex(buf, bufSize);
+		}
 		tempNumber = buf[0];
 		for (j = 1; j < bufSize; j++) {
 			tempNumber = tempNumber << 8;
 			tempNumber += buf[j];
 		}
-		//printf("%d. Message is %llu\n", i+1, tempNumber);
+		if (debug) {
+			printf("%d. Message is %llu\n", i + 1, tempNumber);
+		}
 		encrypted = rsa_modExp(tempNumber, e, n);
-		//printf("Encrypted: %llu\n", encrypted);
+		if (debug) {
+			printf("Encrypted: %llu\n", encrypted);
+		}
 		fprintf(cipher_file, "%llu ", encrypted);
 		free(buf);
 	}
 	fclose(cipher_file);
-	//printf("\n");
 	if (debug) {
 		printf("Sifrovanie dokoncene. Sifra je ulozena v subore %s.\n", cipher);
 	}
@@ -223,33 +228,45 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 
 void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *cipher, char *output)
 {
-	if (output == NULL) {
-		output = "output.txt";
-	}
-	int i;
-	FILE *output_file, *cipher_file;
-	output_file = fopen(output, "wb");
-	cipher_file = fopen(cipher, "r");
+	unsigned long long outSize = bufSize;
 	unsigned char *msg;
 	unsigned long long int cipherMsg, decrypted;
+	FILE *output_file, *cipher_file;
+	if (output != NULL) {
+		output_file = fopen(output, "wb");
+	}
+	else {
+		output_file = stdout;
+		if (debug) {
+			printf("Desifrovany text:\n");
+		}
+	}
+	cipher_file = fopen(cipher, "r");
 	msg = (unsigned char *)malloc(sizeof(unsigned char) * bufSize);
 	while(fscanf(cipher_file, "%llu", &cipherMsg) != EOF)  {
 		decrypted = rsa_modExp(cipherMsg, d, n);
-		//printf("Decrypted: %llu\n", decrypted);
+		/*if (debug) {
+			printf("Decrypted: %llu\n", decrypted);
+		}*/
 		msg = strToInt(bufSize, decrypted);
 		fwrite(msg, sizeof(unsigned char), strlen(msg), output_file);
 	}
 	fclose(cipher_file);
-	fclose(output_file);
-	if (debug) {
-		printf("Desifrovanie dokoncene. Vystup je ulozeny v subore %s.\n", output);
+	if (output != NULL) {
+		fclose(output_file);
+	}
+	if (debug && output != NULL) {
+		printf("\nDesifrovanie dokoncene. Vystup je ulozeny v subore %s.\n", output);
+	}
+	else if (debug) {
+		printf("\nDesifrovanie dokoncene. Vystup je na stdout.\n");
 	}
 }
 
 char *inputString(char *input, long long bufSize, long long *numBlocks) {
 	FILE *input_file;
 	int i = 0;
-	unsigned char c, *temp, *message;
+	unsigned char c, *temp, *message, *tmpMsg;
 	long sizeOfFile = 0;
 	//nacitanie suboru do buffra
 	if (input != NULL) {
@@ -264,45 +281,27 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 		fread(message, sizeof(unsigned char), sizeOfFile, input_file);
 		message[sizeOfFile] = '\0';
 		*numBlocks = round_closest(sizeOfFile, bufSize);
+		fclose(input_file);
 		return message;
 	}
 	//nacitanie znakov zo standardneho vstupu
 	else {
 		input_file = stdin;
-		message = (unsigned char *)malloc(sizeof(unsigned char) * bufSize);
-		if (!message) {
-			if (debug) {
-				printf("Chyba: Alokacia pamate zlyhala.\n");
-			}
-			return NULL;
-		}
-		int len = 0;
-		while (fscanf(input_file, "%c", &c) != EOF) {
-			message[len++] = c;
-			if (len == bufSize) {
-				temp = realloc(message, sizeof(unsigned char) * len * 2);
-				if (temp) {
-					message = temp;
-				}
-				else {
-					if (debug) {
-						printf("Realokovanie buffra so vstupom zlyhalo!\n");
-					}
-					return NULL;
-				}
-			}
-		}
-		message[len++] = '\0';
-		len = strlen(message);
-		temp = realloc(message, sizeof(unsigned char) * len);
-		if (temp) {
-			message = temp;
+		fseek(input_file, 0, SEEK_END);
+		sizeOfFile = ftell(input_file);
+		fseek(input_file, 0, SEEK_SET);
+		if (sizeOfFile > 0) {
+			message = (unsigned char *)malloc(sizeof(unsigned char) * sizeOfFile);
+			fread(message, 1, sizeOfFile, input_file);
+			message[sizeOfFile - 1] = '\0';
 		}
 		else {
-			printf("Message reallocation failed!\n");
-			return NULL;
+			message = (unsigned char *)malloc(sizeof(unsigned char) * 1024);
+			fgets(message, 1023, input_file);
+			sizeOfFile = strlen(message);
+			message[sizeOfFile - 1] = '\0';
 		}
-		*numBlocks = round_closest(len, bufSize);
+		*numBlocks = round_closest(sizeOfFile, bufSize);
 		return message;
 	}
 }
@@ -321,7 +320,7 @@ int main(int argc, char **argv) {
 	struct public_key pub[1];
 	struct private_key priv[1];
 	int modSize = 32, bufSize = modSize / 8;
-	int i, j;
+	int i, j, flag = 0;
 	long long numBlocks = 0;
 	clock_t begin, end;
 	double time_spent;
@@ -377,45 +376,47 @@ int main(int argc, char **argv) {
 				if (i < argc) {
 					FILE *key;
 					key = fopen(argv[i], "r");
-					int flag = 0;
-					//testujem ci je to subor s verejnym klucom, ak ano tak ho citam
-					if (strstr(argv[i], ".pub") != NULL) {
-						if (fscanf(key, "%llu", &pub->n) != EOF) {
-							if (fscanf(key, "%llu", &pub->e) != EOF) {
-								if (debug) {
-									printf("Nacitane kluce:\nn: %llu\ne: %llu\n", pub->n, pub->e);
+					if (key != NULL)
+					{
+						//testujem ci je to subor s verejnym klucom, ak ano tak ho citam
+						if (strstr(argv[i], ".pub") != NULL) {
+							if (fscanf(key, "%llu", &pub->n) != EOF) {
+								if (fscanf(key, "%llu", &pub->e) != EOF) {
+									if (debug) {
+										printf("Nacitane kluce:\nn: %llu\ne: %llu\n", pub->n, pub->e);
+									}
+								}
+								else {
+									fprintf(stderr, "Zly vstupny subor s klucom!\n");
+									return 0;
 								}
 							}
 							else {
-								if (debug) {
-									fprintf(stderr, "Zly vstupny subor s klucom!\n");
-								}
+								fprintf(stderr, "Zly vstupny subor s klucom!\n");
 								return 0;
 							}
 						}
+						//citam subor so sukromnym klucom
 						else {
-							if (debug) {
-								fprintf(stderr, "Zly vstupny subor s klucom!\n");
-							}
-							return 0;
-						}
-					}
-					//citam subor so sukromnym klucom
-					else {
-						flag = 1;
-						if (fscanf(key, "%llu", &priv->n) != EOF) {
-							if (fscanf(key, "%llu", &priv->d) != EOF) {
-								if (debug) {
-									printf("Nacitane kluce:\nn: %llu\nd: %llu\n", priv->n, priv->d);
+							flag = 1;
+							if (fscanf(key, "%llu", &priv->n) != EOF) {
+								if (fscanf(key, "%llu", &priv->d) != EOF) {
+									if (debug) {
+										printf("Nacitane kluce:\nn: %llu\nd: %llu\n", priv->n, priv->d);
+									}
 								}
 							}
 						}
+						fclose(key);
 					}
-					fclose(key);
+					else {
+						fprintf(stderr, "Nepodarilo sa otvorit subor s klucom!\n");
+						return 0;
+					}
 					i++;
 					if (argv[i] == NULL) {
-						if (debug) {
-							printf("Nebol zadany vstupny subor, citam stdin.\n");
+						if (!strcmp(argv[i - 2], "-e")) {
+							fprintf(stderr, "Nebol zadany vstupny subor, citam stdin.\n");
 						}
 						input = NULL;
 						output = NULL;
@@ -433,11 +434,10 @@ int main(int argc, char **argv) {
 					if (!strcmp(argv[i - 2], "-e")) {
 						char *message;
 						begin = clock();
+						//nacitanie vstupu do buffra
 						message = inputString(argv[i], bufSize, &numBlocks);
 						if (message == NULL) {
-							if (debug) {
-								printf("Chyba pri citani zo vstupu!\n");
-							}
+							fprintf(stderr, "Chyba pri citani zo vstupu!\n");
 							exit(1);
 						}
 						end = clock();
@@ -479,51 +479,17 @@ int main(int argc, char **argv) {
 								printf("Desifrovanie zabralo %lf sekund.\n", time_spent);
 							}
 						}
-						else if (debug) {
-							printf("Nebol zadany vstupny subor na desifrovanie.\n");
+						else {
+							fprintf(stderr, "Nebol zadany vstupny subor na desifrovanie.\n");
+							exit(1);
 						}
 						return 0;
 					}
 				}
 				else {
-					if (debug) {
-						printf("Chyba subor s klucom!\n");
-					}
+					fprintf(stderr, "Chyba subor s klucom!\n");
+					exit(1);
 				}
-			}
-			else if (!strcmp(argv[i], "-t")) {
-				FILE *test, *test_out;
-				test = fopen(argv[++i], "rb");
-				fseek(test, 0, SEEK_END);
-				long sizeOfFile = ftell(test);
-				fseek(test, 0, SEEK_SET);
-				printf("Velkost suboru je:\t\t%ld\n", sizeOfFile);
-				unsigned char *buff2;
-				unsigned char c;
-				long idx = 0;
-				buff2 = (unsigned char*)malloc(sizeOfFile * sizeof(unsigned char));
-				begin = clock();
-				/*while (fscanf(test, "%c", &c) != EOF) {
-					buff2[idx++] = c;
-				}*/
-				fread(buff2, sizeOfFile, sizeof(unsigned char), test);
-				end = clock();
-				time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-				printf("Pocet nacitanych znakov:\t%ld\n", strlen(buff2));
-				printf("Nacitanie zabralo %lf sekund.\n", time_spent);
-				fclose(test);
-
-				char *dest_filename;
-				dest_filename = (char*)malloc((strlen(argv[i]) + 1) * sizeof(char));
-				dest_filename[0] = '1';
-				dest_filename[1] = '\0';
-				strcat(dest_filename, argv[i]);
-				test_out = fopen("out", "wb");
-				fwrite(buff2, sizeof(unsigned char), sizeOfFile, test_out);
-				fclose(test_out);
-				printf("Ulozenie dokoncene.\n");
-				free(buff2);
-				return 0;
 			}
 			else if (!strcmp(argv[i], "-b")) {
 				if (!debug) {
@@ -531,16 +497,14 @@ int main(int argc, char **argv) {
 				}
 			}
 			else {
-				printf("%s je zly argument, skus znova alebo pouzi -h pre pomoc.\n", argv[i]);
+				fprintf(stderr, "%s je zly argument, skus znova alebo pouzi -h pre pomoc.\n", argv[i]);
 				return 0;
 			}
 		}
 		return 0;
 	}
 	else {
-		if (debug) {
-			printf("Malo argumentov, skus znova alebo pouzi -h pre pomoc.\n");
-		}
+		fprintf(stderr, "Malo argumentov, skus znova alebo pouzi -h pre pomoc.\n");
 		return 0;
 	}
 }
