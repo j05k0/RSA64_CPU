@@ -278,21 +278,23 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 			printf("Velkost suboru je:\t\t%ld\n", sizeOfFile);
 		}
 		message = (unsigned char *)malloc(sizeof(unsigned char)* sizeOfFile);
-		fread(message, sizeof(unsigned char), sizeOfFile, input_file);
+		fread(message, sizeOfFile, sizeof(unsigned char), input_file);
 		message[sizeOfFile] = '\0';
-		*numBlocks = round_closest(sizeOfFile, bufSize);
 		fclose(input_file);
-		return message;
 	}
 	//nacitanie znakov zo standardneho vstupu
 	else {
+		freopen(NULL, "rb+", stdin);
 		input_file = stdin;
 		fseek(input_file, 0, SEEK_END);
 		sizeOfFile = ftell(input_file);
 		fseek(input_file, 0, SEEK_SET);
 		if (sizeOfFile > 0) {
+			if (debug) {
+				printf("Velkost suboru je:\t\t%ld\n", sizeOfFile);
+			}
 			message = (unsigned char *)malloc(sizeof(unsigned char) * sizeOfFile);
-			fread(message, 1, sizeOfFile, input_file);
+			fread(message, sizeOfFile, 1, input_file);
 			message[sizeOfFile - 1] = '\0';
 		}
 		else {
@@ -301,9 +303,9 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 			sizeOfFile = strlen(message);
 			message[sizeOfFile - 1] = '\0';
 		}
-		*numBlocks = round_closest(sizeOfFile, bufSize);
-		return message;
 	}
+	*numBlocks = round_closest(sizeOfFile, bufSize);
+	return message;
 }
 
 void help(char *argv) {
@@ -415,8 +417,8 @@ int main(int argc, char **argv) {
 					}
 					i++;
 					if (argv[i] == NULL) {
-						if (!strcmp(argv[i - 2], "-e")) {
-							fprintf(stderr, "Nebol zadany vstupny subor, citam stdin.\n");
+						if (debug && !strcmp(argv[i - 2], "-e")) {
+							printf("Nebol zadany vstupny subor, citam stdin.\n");
 						}
 						input = NULL;
 						output = NULL;
