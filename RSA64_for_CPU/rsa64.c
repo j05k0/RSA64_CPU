@@ -191,7 +191,7 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 {
 	int i, j, flag = 0;
 	unsigned char *buf;
-	unsigned long long encrypted, tempNumber;
+	unsigned long long encrypted, tempNumber = 0;
 	if (cipher == NULL) {
 		cipher = "cipher";
 	}
@@ -339,7 +339,12 @@ unsigned char *inputString(char *input, long long bufSize, long long *numBlocks)
 			message[sizeOfFile - 1] = '\0';
 		}
 	}
-	*numBlocks = sizeOfFile / bufSize + 1;
+	if (sizeOfFile % bufSize != 0) {
+		*numBlocks = sizeOfFile / bufSize + 1;
+	}
+	else {
+		*numBlocks = sizeOfFile / bufSize;
+	}
 	return message;
 }
 
