@@ -18,10 +18,10 @@ struct private_key {
 	unsigned long long d;
 };
 
-unsigned long long round_closest(unsigned long long dividend, unsigned long long divisor)
-{
-	return (dividend + (divisor / 2)) / divisor;
-}
+struct message {
+	unsigned char *msg;
+	unsigned long long size;
+};
 
 void print_hex(char* arr, int len)
 {
@@ -31,18 +31,24 @@ void print_hex(char* arr, int len)
 	printf("\n");
 }
 
-char *strToInt(int bufSize, unsigned long long decrypted) {
-	int i;
-	char *decMsg;
-	decMsg = malloc((bufSize + 1) * sizeof(char));
+struct message strToInt(int bufSize, unsigned long long decrypted, int flag) {
+	struct message decMsg;
+	int i, tmp;
 	unsigned long long int temp;
-	for (i = 3; i >= 0; i--) {
+	decMsg.msg = (unsigned char *)malloc(bufSize * sizeof(unsigned char));
+	decMsg.size = 0;
+	for (i = bufSize - 1; i >= 0; i--) {
 		temp = decrypted >> 8;
 		temp = temp << 8;
-		decMsg[i] = decrypted - temp;
+		decMsg.msg[i] = decrypted - temp;
+		if (flag && decMsg.msg[i] == 255) {
+			decMsg.size = i;
+		}
 		decrypted = decrypted >> 8;
 	}
-	decMsg[bufSize] = '\0';
+	if (decMsg.size == 0) {
+		decMsg.size = bufSize;
+	}
 	return decMsg;
 }
 
@@ -183,40 +189,37 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 
 void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks, int bufSize, unsigned char *message, unsigned char *cipher)
 {
-	int i, j;
+	int i, j, flag = 0;
 	unsigned char *buf;
 	unsigned long long encrypted, tempNumber;
-	int flag = 0;
 	if (cipher == NULL) {
-		cipher = "cipher.txt";
+		cipher = "cipher";
 	}
 	FILE *cipher_file;
 	cipher_file = fopen(cipher, "w");
 	for (i = 0; i < numBlocks; i++) {
-		buf = (unsigned char*)malloc((i + 1) * bufSize * sizeof(unsigned char));
+		buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char));
 		for (j = 0; j < bufSize; j++) {
-			if (!flag)
+			if (!flag) {
 				buf[j] = *(message + i * bufSize + j);
-			else
-				buf[j] = '\0';
-			if (buf[j] == '\0')
-				flag = 1;
+				if ((i == numBlocks - 1) && buf[j] == 255) {
+					flag = 1;
+				}
+			}
+			else {
+				buf[j] = 0;
+			}
 		}
-		if (debug) {
-			print_hex(buf, bufSize);
-		}
+		//print_hex(buf, bufSize);
 		tempNumber = buf[0];
 		for (j = 1; j < bufSize; j++) {
 			tempNumber = tempNumber << 8;
 			tempNumber += buf[j];
 		}
-		if (debug) {
-			printf("%d. Message is %llu\n", i + 1, tempNumber);
-		}
+		//printf("%d. Message is %llu\n", i + 1, tempNumber);
 		encrypted = rsa_modExp(tempNumber, e, n);
-		if (debug) {
-			printf("Encrypted: %llu\n", encrypted);
-		}
+		//printf("Encrypted: %llu\n", encrypted);
+		//TODO, skusit cez fwrite...
 		fprintf(cipher_file, "%llu ", encrypted);
 		free(buf);
 	}
@@ -229,8 +232,10 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *cipher, char *output)
 {
 	unsigned long long outSize = bufSize;
-	unsigned char *msg;
-	unsigned long long int cipherMsg, decrypted;
+	struct message decMsg;
+	unsigned long long int *cipherMsg, *temp, decrypted, c;
+	long long numBlocks;
+	int len, i;
 	FILE *output_file, *cipher_file;
 	if (output != NULL) {
 		output_file = fopen(output, "wb");
@@ -242,16 +247,42 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 		}
 	}
 	cipher_file = fopen(cipher, "r");
-	msg = (unsigned char *)malloc(sizeof(unsigned char) * bufSize);
-	while(fscanf(cipher_file, "%llu", &cipherMsg) != EOF)  {
-		decrypted = rsa_modExp(cipherMsg, d, n);
-		/*if (debug) {
-			printf("Decrypted: %llu\n", decrypted);
-		}*/
-		msg = strToInt(bufSize, decrypted);
-		fwrite(msg, sizeof(unsigned char), strlen(msg), output_file);
+	decMsg.msg = (unsigned char *)malloc(sizeof(unsigned char) * bufSize);
+	cipherMsg = (unsigned long long *)malloc(sizeof(unsigned long long));
+	numBlocks = 1;
+	for (i = 0; fscanf(cipher_file, "%llu", &c) != EOF; i++) {
+		cipherMsg[i] = c;
+		if (i == numBlocks - 1) {
+			numBlocks *= 2;
+			temp = realloc(cipherMsg, numBlocks * sizeof(unsigned long long));
+			if (temp) {
+				cipherMsg = temp;
+			}
+			else {
+				fprintf(stderr, "[rsa_decrypt]: Realokacia pamate zlyhala.\n");
+				exit(1);
+			}
+		}
+	}
+	numBlocks = i;
+	temp = realloc(cipherMsg, numBlocks * sizeof(unsigned long long));
+	if (temp) {
+		cipherMsg = temp;
+	}
+	else {
+		fprintf(stderr, "[rsa_decrypt]: Realokacia pamate zlyhala.\n");
+		exit(1);
 	}
 	fclose(cipher_file);
+	for (i = 0; i < numBlocks - 1; i++) {
+		decrypted = rsa_modExp(cipherMsg[i], d, n);
+		//printf("Decrypted: %llu\n", decrypted);
+		decMsg = strToInt(bufSize, decrypted, 0);
+		fwrite(decMsg.msg, 1, decMsg.size, output_file);
+	}
+	decrypted = rsa_modExp(cipherMsg[i], d, n);
+	decMsg = strToInt(bufSize, decrypted, 1);
+	fwrite(decMsg.msg, 1, decMsg.size, output_file);
 	if (output != NULL) {
 		fclose(output_file);
 	}
@@ -263,7 +294,7 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 	}
 }
 
-char *inputString(char *input, long long bufSize, long long *numBlocks) {
+unsigned char *inputString(char *input, long long bufSize, long long *numBlocks) {
 	FILE *input_file;
 	int i = 0;
 	unsigned char c, *temp, *message, *tmpMsg;
@@ -273,18 +304,19 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 		input_file = fopen(input, "rb");
 		fseek(input_file, 0, SEEK_END);
 		sizeOfFile = ftell(input_file);
-		fseek(input_file, 0, SEEK_SET);
+		//fseek(input_file, 0, SEEK_SET);
+		rewind(input_file);
 		if (debug) {
 			printf("Velkost suboru je:\t\t%ld\n", sizeOfFile);
 		}
-		message = (unsigned char *)malloc(sizeof(unsigned char)* sizeOfFile);
-		fread(message, sizeOfFile, sizeof(unsigned char), input_file);
-		message[sizeOfFile] = '\0';
+		message = (unsigned char *)malloc(sizeof(unsigned char) * (sizeOfFile + 1));
+		int size = fread(message, 1, sizeOfFile, input_file);
+		message[sizeOfFile] = 255;
 		fclose(input_file);
 	}
 	//nacitanie znakov zo standardneho vstupu
 	else {
-		freopen(NULL, "rb+", stdin);
+		freopen(NULL, "rb", stdin);
 		input_file = stdin;
 		fseek(input_file, 0, SEEK_END);
 		sizeOfFile = ftell(input_file);
@@ -294,8 +326,11 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 				printf("Velkost suboru je:\t\t%ld\n", sizeOfFile);
 			}
 			message = (unsigned char *)malloc(sizeof(unsigned char) * sizeOfFile);
-			fread(message, sizeOfFile, 1, input_file);
-			message[sizeOfFile - 1] = '\0';
+			sizeOfFile = fread(message, sizeof(unsigned char), sizeOfFile, input_file);
+			if (debug) {
+				printf("Nacitana velkost suboru je:\t%ld\n", sizeOfFile);
+			}
+			message[sizeOfFile] = '\0';
 		}
 		else {
 			message = (unsigned char *)malloc(sizeof(unsigned char) * 1024);
@@ -304,7 +339,7 @@ char *inputString(char *input, long long bufSize, long long *numBlocks) {
 			message[sizeOfFile - 1] = '\0';
 		}
 	}
-	*numBlocks = round_closest(sizeOfFile, bufSize);
+	*numBlocks = sizeOfFile / bufSize + 1;
 	return message;
 }
 
@@ -434,7 +469,7 @@ int main(int argc, char **argv) {
 					}
 					
 					if (!strcmp(argv[i - 2], "-e")) {
-						char *message;
+						unsigned char *message;
 						begin = clock();
 						//nacitanie vstupu do buffra
 						message = inputString(argv[i], bufSize, &numBlocks);
