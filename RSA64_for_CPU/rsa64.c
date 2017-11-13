@@ -33,7 +33,7 @@ void print_hex(char* arr, int len)
 
 struct message strToInt(int bufSize, unsigned long long decrypted, int flag) {
 	struct message decMsg;
-	int i, tmp;
+	int i;
 	unsigned long long int temp;
 	decMsg.msg = (unsigned char *)malloc(bufSize * sizeof(unsigned char));
 	decMsg.size = 0;
@@ -191,12 +191,14 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 {
 	int i, j, flag = 0;
 	unsigned char *buf;
-	unsigned long long encrypted, tempNumber = 0;
+	unsigned long long *encrypted, tempNumber = 0;
+	clock_t begin, end;
+	double time_spent;
 	if (cipher == NULL) {
 		cipher = "cipher";
 	}
-	FILE *cipher_file;
-	cipher_file = fopen(cipher, "w");
+	encrypted = (unsigned long long *)malloc(numBlocks * sizeof(unsigned long long));
+	begin = clock();
 	for (i = 0; i < numBlocks; i++) {
 		buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char));
 		for (j = 0; j < bufSize; j++) {
@@ -217,11 +219,19 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 			tempNumber += buf[j];
 		}
 		//printf("%d. Message is %llu\n", i + 1, tempNumber);
-		encrypted = rsa_modExp(tempNumber, e, n);
+		encrypted[i] = rsa_modExp(tempNumber, e, n);
 		//printf("Encrypted: %llu\n", encrypted);
-		//TODO, skusit cez fwrite...
-		fprintf(cipher_file, "%llu ", encrypted);
 		free(buf);
+	}
+	end = clock();
+	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
+	if (debug) {
+		printf("Sifrovanie zabralo %lf ms.\n", time_spent);
+	}
+	FILE *cipher_file;
+	cipher_file = fopen(cipher, "w");
+	for (i = 0; i < numBlocks; i++) {
+		fprintf(cipher_file, "%llu ", encrypted[i]);
 	}
 	fclose(cipher_file);
 	if (debug) {
@@ -488,18 +498,11 @@ int main(int argc, char **argv) {
 							printf("Nacitanie spravy zabralo %lf sekund.\n", time_spent);
 							printf("Pocet blokov: %llu\n", numBlocks);
 						}
-
-						begin = clock();
 						if (flag) {
 							rsa_encrypt(priv->d, priv->n, numBlocks, bufSize, message, output);
 						}
 						else {
 							rsa_encrypt(pub->e, pub->n, numBlocks, bufSize, message, output);
-						}
-						end = clock();
-						time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-						if (debug) {
-							printf("Sifrovanie zabralo %lf sekund.\n", time_spent);
 						}
 						return 0;
 					}
