@@ -106,21 +106,19 @@ unsigned long long EEA(unsigned long long a, unsigned long long b) {
 
 unsigned long long rsa_modExp(unsigned long long b, unsigned long long e, unsigned long long m)
 {
-	if (b < 0 || e < 0 || m <= 0) {
-		printf("Error of arguments!\n");
-		exit(1);
+	if (m == 1) {
+		return 0;
 	}
+	unsigned long long result = 1;
 	b = b % m;
-	if (e == 0)
-		return 1;
-	if (e == 1)
-		return b;
-	if (e % 2 == 0) {
-		return (rsa_modExp(b * b % m, e / 2, m) % m);
+	while (e > 0) {
+		if (e % 2 == 1) {
+			result = (result * b) % m;
+		}
+		e = e >> 1;
+		b = (b * b) % m;
 	}
-	if (e % 2 == 1) {
-		return (b * rsa_modExp(b, (e - 1), m) % m);
-	}
+	return result;
 }
 
 void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
@@ -189,18 +187,21 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 
 void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks, int bufSize, unsigned char *message, unsigned char *cipher)
 {
+	FILE *cipher_file;
 	int i, j, flag = 0;
 	unsigned char *buf;
-	unsigned long long *encrypted, tempNumber = 0;
+	unsigned long long *encrypted;
 	clock_t begin, end;
 	double time_spent;
 	if (cipher == NULL) {
 		cipher = "cipher";
 	}
+	
 	encrypted = (unsigned long long *)malloc(numBlocks * sizeof(unsigned long long));
+	buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char));
+	cipher_file = fopen(cipher, "w");
 	begin = clock();
 	for (i = 0; i < numBlocks; i++) {
-		buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char));
 		for (j = 0; j < bufSize; j++) {
 			if (!flag) {
 				buf[j] = *(message + i * bufSize + j);
@@ -213,30 +214,26 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, long long numBlocks
 			}
 		}
 		//print_hex(buf, bufSize);
-		tempNumber = buf[0];
+		encrypted[i] = buf[0];
 		for (j = 1; j < bufSize; j++) {
-			tempNumber = tempNumber << 8;
-			tempNumber += buf[j];
+			encrypted[i] = encrypted[i] << 8;
+			encrypted[i] += buf[j];
 		}
 		//printf("%d. Message is %llu\n", i + 1, tempNumber);
-		encrypted[i] = rsa_modExp(tempNumber, e, n);
+		encrypted[i] = rsa_modExp(encrypted[i], e, n);
 		//printf("Encrypted: %llu\n", encrypted);
-		free(buf);
+		fprintf(cipher_file, "%llu ", encrypted[i]);
 	}
+	fclose(cipher_file);
 	end = clock();
 	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
 	if (debug) {
 		printf("Sifrovanie zabralo %lf ms.\n", time_spent);
 	}
-	FILE *cipher_file;
-	cipher_file = fopen(cipher, "w");
-	for (i = 0; i < numBlocks; i++) {
-		fprintf(cipher_file, "%llu ", encrypted[i]);
-	}
-	fclose(cipher_file);
 	if (debug) {
 		printf("Sifrovanie dokoncene. Sifra je ulozena v subore %s.\n", cipher);
 	}
+	free(buf);
 }
 
 void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *cipher, char *output)
