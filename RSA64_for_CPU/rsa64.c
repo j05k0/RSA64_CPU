@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 
-#define MAX_KEYBOARD_INPUT 1023
+#define MAX_KEYBOARD_INPUT 1024
 
 int debug = 0;
 
@@ -234,6 +234,7 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, int bufSize, struct
 		cipher_file = fopen(cipher, "wb");
 	}
 	else {
+		freopen(NULL, "wb", stdout);
 		cipher_file = stdout;
 		if (debug) {
 			printf("Zasifrovany text:\n");
@@ -360,7 +361,6 @@ struct message inputString(char *input, long long bufSize) {
 		input_file = fopen(input, "rb");
 		fseek(input_file, 0, SEEK_END);
 		sizeOfFile = ftell(input_file);
-		//fseek(input_file, 0, SEEK_SET);
 		rewind(input_file);
 		if (debug) {
 			printf("Velkost suboru je:\t\t%llu\n", sizeOfFile);
@@ -398,7 +398,7 @@ struct message inputString(char *input, long long bufSize) {
 			message.msg = (unsigned char *)malloc(sizeof(unsigned char) * (MAX_KEYBOARD_INPUT + 1));
 			fgets(message.msg, MAX_KEYBOARD_INPUT, input_file);
 			message.size = strlen(message.msg);
-			//message.msg[message.size - 1] = '\0';
+			realloc(message.msg, (message.size + 1) * sizeof(unsigned char));
 			message.msg[message.size++] = 255;
 			sizeOfFile = message.size;
 		}
@@ -434,6 +434,10 @@ int main(int argc, char **argv) {
 	if (argc > 1) {
 		for (i = 1; i < argc; i++) {
 			if (!strcmp(argv[i], "-b")) {
+				if (argc == 2) {
+					fprintf(stderr, "Malo argumentov, skus znova alebo pouzi -h pre pomoc.\n");
+					return 0;
+				}
 				debug = 1;
 				break;
 			}
@@ -475,6 +479,7 @@ int main(int argc, char **argv) {
 				if (debug) {
 					printf("Kluce boli ulozene do suborov %s and %s...\n", filename1, filename2);
 				}
+				return 0;
 			}
 			else if (!strcmp(argv[i], "-e") || !strcmp(argv[i], "-d")) {
 				i++;
