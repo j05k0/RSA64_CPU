@@ -34,11 +34,16 @@ void print_hex(char* arr, int len)
 	printf("\n");
 }
 
+//funkcia na konvertovanie cisla na ASCII znaky
 struct message intToStr(int bufSize, unsigned long long decrypted, int flag) {
 	struct message decMsg;
 	int i;
 	unsigned long long int temp;
 	decMsg.msg = (unsigned char *)malloc(bufSize * sizeof(unsigned char));
+	if(!decMsg.msg){
+		fprintf(stderr, "[intToStr]: Nepodarilo sa alokovat pamat pre buffer\n");
+		exit(1);
+	}
 	decMsg.size = 0;
 	for (i = bufSize - 1; i >= 0; i--) {
 		temp = decrypted >> 8;
@@ -90,6 +95,7 @@ unsigned long long gcd(unsigned long long a, unsigned long long b)
 	}
 }
 
+//rozsireny Euklidov algoritmus
 unsigned long long EEA(unsigned long long a, unsigned long long b) {
 	unsigned long long x = 0, y = 1, u = 1, v = 0, gcd = b, m, n, q, r;
 	while (a != 0) {
@@ -107,6 +113,7 @@ unsigned long long EEA(unsigned long long a, unsigned long long b) {
 	return y;
 }
 
+//funkcia na vypocet zasirovaneho, resp. otvoreneho textu
 unsigned long long rsa_modExp(unsigned long long b, unsigned long long e, unsigned long long m)
 {
 	if (m == 1) {
@@ -131,31 +138,38 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 	unsigned char *buf;
 	unsigned long long int phi;
 	buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char) + 1);
-
+	if(!buf){
+		fprintf(stderr, "[rsa_gen_keys]: Nepodarilo sa alokovat pamat pre buffer\n");
+		exit(1);
+	}
 	pub->e = 65537;
 	srand(time(NULL));
 	
 	do {
+		//generovanie bajtov pre prvocislo p
 		for (i = 0; i < bufSize; i++) {
 			buf[i] = rand() % 0xFF;
 		}
-		buf[0] |= 0xC0;
+		//prvy bajt nastavime na same jednotky, aby sme zabezpecili dostatocne velke cislo
+		buf[0] |= 0xFF;
+		//posledny bit na 1 aby to bolo neparne cislo
 		buf[bufSize - 1] |= 0x01;
 		priv->p = buf[0];
 		for (i = 1; i < bufSize; i++) {
 			priv->p = priv->p << 8;
 			priv->p += buf[i];
 		}
+		//do p ulozime nasledujuce prvocislo
 		priv->p = nextPrime(priv->p);
 		while (priv->p % pub->e == 1) {
 			priv->p = nextPrime(priv->p);
 		}
-
+		//generovanie prvocisla q
 		do {
 			for (i = 0; i < bufSize; i++) {
 				buf[i] = rand() % 0xFF;
 			}
-			buf[0] |= 0xC0;
+			buf[0] |= 0xFF;
 			buf[bufSize - 1] |= 0x01;
 			priv->q = buf[0];
 			for (i = 1; i < bufSize; i++) {
@@ -167,9 +181,11 @@ void rsa_gen_keys(struct public_key *pub, struct private_key *priv, int modSize)
 				priv->q = nextPrime(priv->q);
 			}
 		} while (priv->p == priv->q);
+		//vypocet modula
 		priv->n = priv->p * priv->q;
 		pub->n = priv->n;
 		phi = (priv->p - 1) * (priv->q - 1);
+		//vypocet sukromneho kluca pomocou rozsireneho Euklidovho algoritmu
 		priv->d = EEA(phi, pub->e);
 		while (priv->d < 0) {
 			priv->d = priv->d + phi;
@@ -196,8 +212,17 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, int bufSize, struct
 	clock_t begin, end;
 	double time_spent;
 	
+	//priprava blokov na sifrovanie, konvertovanie bloku na jedno cislo
 	encrypted = (unsigned long long *)malloc(message.numBlocks * sizeof(unsigned long long));
+	if(!encrypted){
+		fprintf(stderr, "[rsa_encrypt]: Nepodarilo sa alokovat pamat pre buffer encrypted\n");
+		exit(1);
+	}
 	buf = (unsigned char*)malloc(bufSize * sizeof(unsigned char));
+	if(!buf){
+		fprintf(stderr, "[rsa_encrypt]: Nepodarilo sa alokovat pamat pre buffer\n");
+		exit(1);
+	}
 	begin = clock();
 	for (i = 0; i < message.numBlocks; i++) {
 		for (j = 0; j < bufSize; j++) {
@@ -211,24 +236,29 @@ void rsa_encrypt(unsigned long long e, unsigned long long n, int bufSize, struct
 				buf[j] = 0;
 			}
 		}
-		//print_hex(buf, bufSize);
 		encrypted[i] = buf[0];
 		for (j = 1; j < bufSize; j++) {
 			encrypted[i] = encrypted[i] << 8;
 			encrypted[i] += buf[j];
-		}
-		//printf("%d. Message is %llu\n", i + 1, tempNumber);
-		encrypted[i] = rsa_modExp(encrypted[i], e, n);
-		//printf("Encrypted: %llu\n", encrypted);
-		
+		}	
 	}
 	free(buf);
 	end = clock();
 	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
 	if (debug) {
-		printf("Sifrovanie zabralo %lf ms\n", time_spent);
+		printf("Priprava blokov na sifrovanie trvala %lf ms\n", time_spent);
 	}
-
+	
+	begin = clock();
+	for (i = 0; i < message.numBlocks; i++) {
+		encrypted[i] = rsa_modExp(encrypted[i], e, n);
+	}
+	end = clock();
+	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
+	if (debug) {
+		printf("Sifrovanie trvalo %lf ms\n", time_spent);
+	}
+	
 	FILE *cipher_file;
 	if (cipher != NULL) {
 		cipher_file = fopen(cipher, "wb");
@@ -275,29 +305,41 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 	double time_spent;
 	FILE *output_file, *cipher_file;
 	
+	//nacitanie zasifrovaneho textu
 	begin = clock();
 	if (input != NULL) {
+		//nacitanie ZT zo suboru
 		cipher_file = fopen(input, "rb");
+		if(!cipher_file){
+			fprintf(stderr, "[rsa_decrypt]: Nepodarilo sa otvorit subor %s\n", input);
+			exit(1);
+	}
 		fseek(cipher_file, 0, SEEK_END);
 		sizeOfFile = ftell(cipher_file);
 		rewind(cipher_file);
 		sizeOfFile /= 8;
 		decrypted = (unsigned long long *)malloc(sizeof(unsigned long long) * sizeOfFile);
 		if (!decrypted) {
-			fprintf(stderr, "[rsa_decrypt]Alokacia pamate pre decrypted zlyhala\n");
+			fprintf(stderr, "[rsa_decrypt]: Alokacia pamate pre decrypted zlyhala\n");
 			exit(1);
 		}
 		numBlocks = fread(decrypted, sizeof(unsigned long long), sizeOfFile, cipher_file);
 		fclose(cipher_file);
 	}
 	else {
+		//nacitanie ZT zo stdin
 		freopen(NULL, "rb", stdin);
 		cipher_file = stdin;
 		fseek(cipher_file, 0, SEEK_END);
 		sizeOfFile = ftell(cipher_file);
-		rewind(cipher_file);
+		fseek(cipher_file, 0, SEEK_SET);
+		sizeOfFile /= 8;
 		if (sizeOfFile > 0) {
 			decrypted = (unsigned long long *)malloc(sizeof(unsigned long long) * sizeOfFile);
+			if (!decrypted) {
+				fprintf(stderr, "[rsa_decrypt]: Alokacia pamate pre decrypted zlyhala\n");
+				exit(1);
+			}
 			numBlocks = fread(decrypted, sizeof(unsigned long long), sizeOfFile, cipher_file);
 		}
 		else {
@@ -308,7 +350,7 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 	end = clock();
 	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
 	if (debug) {
-		printf("Nacitanie sifry zabralo %lf ms.\n", time_spent);
+		printf("Nacitanie sifry trvalo %lf ms.\n", time_spent);
 		printf("Pocet blokov: %llu\n", numBlocks);
 	}
 	realloc(decrypted, numBlocks * sizeof(unsigned long long));
@@ -322,19 +364,28 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 			printf("Desifrovany text:\n");
 		}
 	}
-
+	
+	begin = clock();
+	for (i = 0; i < numBlocks; i++) {
+		decrypted[i] = rsa_modExp(decrypted[i], d, n);
+	}
+	end = clock();
+	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
+	if(debug){
+		printf("Desifrovanie trvalo %lf ms\n", time_spent);
+	}
+	
+	//konvertovanie desifrovanej spravy na citatelny text a zapis do suboru
 	begin = clock();
 	struct message decMsg;
 	for (i = 0; i < numBlocks - 1; i++) {
-		decrypted[i] = rsa_modExp(decrypted[i], d, n);
-		//printf("Decrypted: %llu\n", decrypted);
 		decMsg = intToStr(bufSize, decrypted[i], 0);
 		fwrite(decMsg.msg, 1, decMsg.size, output_file);
 		free(decMsg.msg);
 	}
-	decrypted[i] = rsa_modExp(decrypted[i], d, n);
 	decMsg = intToStr(bufSize, decrypted[i], 1);
 	fwrite(decMsg.msg, 1, decMsg.size, output_file);
+	free(decMsg.msg);
 	end = clock();
 	time_spent = ((double)(end - begin) / CLOCKS_PER_SEC) * 1000;
 
@@ -342,7 +393,7 @@ void rsa_decrypt(unsigned long long d, unsigned long long n, int bufSize, char *
 		fclose(output_file);
 	}
 	if (debug && output != NULL) {
-		printf("Desifrovanie trvalo %lf ms\n", time_spent);
+		printf("Zapis desifrovanej spravy do suboru trval %lf ms\n", time_spent);
 		printf("Desifrovanie dokoncene. Vystup je ulozeny v subore %s\n", output);
 	}
 	else if (debug) {
@@ -359,6 +410,10 @@ struct message inputString(char *input, long long bufSize) {
 	//nacitanie suboru do buffra
 	if (input != NULL) {
 		input_file = fopen(input, "rb");
+		if(!input_file){
+			fprintf(stderr, "[rsa_decrypt]: Nepodarilo sa otvorit subor %s\n", input);
+			exit(1);
+		}
 		fseek(input_file, 0, SEEK_END);
 		sizeOfFile = ftell(input_file);
 		rewind(input_file);
@@ -366,6 +421,10 @@ struct message inputString(char *input, long long bufSize) {
 			printf("Velkost suboru je:\t\t%llu\n", sizeOfFile);
 		}
 		message.msg = (unsigned char *)malloc(sizeof(unsigned char) * (sizeOfFile + 1));
+		if (!message.msg) {
+			fprintf(stderr, "[inputString]: Nepodarilo sa alokovat pamat pre buffer\n");
+			exit(1);
+		}
 		message.size = fread(message.msg, 1, sizeOfFile, input_file);
 		if (debug) {
 			printf("Nacitana velkost suboru je:\t%llu\n", message.size);
@@ -387,6 +446,10 @@ struct message inputString(char *input, long long bufSize) {
 				printf("Velkost suboru je:\t\t%llu\n", sizeOfFile);
 			}
 			message.msg = (unsigned char *)malloc(sizeof(unsigned char) * sizeOfFile);
+			if (!message.msg) {
+				fprintf(stderr, "[inputString]: Nepodarilo sa alokovat pamat pre buffer\n");
+				exit(1);
+			}
 			message.size = fread(message.msg, 1, sizeOfFile, input_file);
 			if (debug) {
 				printf("Nacitana velkost suboru je:\t%llu\n", message.size);
@@ -396,9 +459,13 @@ struct message inputString(char *input, long long bufSize) {
 		else {
 			//nacitanie znakov zo stdin
 			message.msg = (unsigned char *)malloc(sizeof(unsigned char) * (MAX_KEYBOARD_INPUT + 1));
+			if (!message.msg) {
+				fprintf(stderr, "[inputString]: Nepodarilo sa alokovat pamat pre buffer\n");
+				exit(1);
+			}
 			fgets(message.msg, MAX_KEYBOARD_INPUT, input_file);
 			message.size = strlen(message.msg);
-			realloc(message.msg, (message.size + 1) * sizeof(unsigned char));
+			//realloc(message.msg, (message.size + 1) * sizeof(unsigned char));
 			message.msg[message.size++] = 255;
 			sizeOfFile = message.size;
 		}
@@ -413,13 +480,26 @@ struct message inputString(char *input, long long bufSize) {
 }
 
 void help(char *argv) {
+	//nacitanie suboru s helpom a jeho nasledne zobrazenie na obrazovku
 	FILE *help;
-	char input;
-	help = fopen("help.txt", "r");
-	while (fscanf(help, "%c", &input) != EOF) {
-		printf("%c", input);
+	char *input;
+	help = fopen("help.txt", "rb");
+	if(!help){
+			fprintf(stderr, "[help]: Nepodarilo sa otvorit subor s pouzivatelskou priruckou\n");
+			exit(1);
 	}
+	fseek(help, 0, SEEK_END);
+	int sizeOfFile = ftell(help);
+	rewind(help);
+	input = (char*)malloc(sizeOfFile * sizeof(char));
+	if (!input) {
+		fprintf(stderr, "[help]: Nepodarilo sa alokovat pamat pre buffer\n");
+		exit(1);
+	}
+	fread(input, sizeof(char), sizeOfFile, help);
 	fclose(help);
+	input[sizeOfFile] = '\0';
+	printf("%s", input);
 }
 
 int main(int argc, char **argv) {
@@ -433,6 +513,7 @@ int main(int argc, char **argv) {
 
 	if (argc > 1) {
 		for (i = 1; i < argc; i++) {
+			//prepinac, ktory zapina debugovaci mod
 			if (!strcmp(argv[i], "-b")) {
 				if (argc == 2) {
 					fprintf(stderr, "Malo argumentov, skus znova alebo pouzi -h pre pomoc.\n");
@@ -443,16 +524,27 @@ int main(int argc, char **argv) {
 			}
 		}
 		for (i = 1; i < argc; i++) {
+			//prepinac, ktory vypise help
 			if (!strcmp(argv[i], "-h")) {
 				help(argv[0]);
 			}
+			//prepinac na vygenerovanie a ulozenie klucov k RSA
 			else if (!strcmp(argv[i], "-g")) {
 				rsa_gen_keys(pub, priv, modSize);
 				i++;
 				char *filename1, *filename2;
 				if (i < argc && (strcmp(argv[i], "-e") != 0 && strcmp(argv[i], "-d") != 0 && strcmp(argv[i], "-h") != 0) && strcmp(argv[i], "-b") != 0) {
+					//nacitanie nazvu vystupneho suboru zo vstupu
 					filename1 = (char*)malloc((strlen(argv[i]) + 1) * sizeof(char));
+					if (!filename1) {
+						fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer filename1\n");
+						exit(1);
+					}
 					filename2 = (char*)malloc((strlen(argv[i]) + 5) * sizeof(char));
+					if (!filename2) {
+						fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer filename1\n");
+						exit(1);
+					}
 					filename1[0] = '\0';
 					filename2[0] = '\0';
 					strcat(filename1, argv[i]);
@@ -460,15 +552,25 @@ int main(int argc, char **argv) {
 					strcat(filename2, ".pub");
 				}
 				else {
+					//v pripade, ze na vstupe nie je nazov vystupneho suboru, pouziju sa defaultne nazvy
 					i--;
 					filename1 = (char*)malloc(7 * sizeof(char));
+					if (!filename1) {
+						fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer filename1\n");
+						exit(1);
+					}
 					filename2 = (char*)malloc(11 * sizeof(char));
+					if (!filename2) {
+						fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer filename1\n");
+						exit(1);
+					}
 					filename1[0] = '\0';
 					filename2[0] = '\0';
 					strcat(filename1, "rsakey");
 					strcat(filename2, filename1);
 					strcat(filename2, ".pub");
 				}
+				//ulozenie klucov do suborov
 				FILE *keyFile;
 				keyFile = fopen(filename1, "w");
 				fprintf(keyFile, "%llu %llu %llu %llu", priv->n, priv->d, priv->p, priv->q);
@@ -523,6 +625,7 @@ int main(int argc, char **argv) {
 						fprintf(stderr, "Nepodarilo sa otvorit subor s klucom!\n");
 						return 0;
 					}
+					//spracovanie dalsich vstupnych argumentov
 					i++;
 					if (argv[i] == NULL) {
 						if (debug) {
@@ -533,9 +636,17 @@ int main(int argc, char **argv) {
 					}
 					else {
 						input = (char*)malloc(strlen(argv[i]) * sizeof(char));
+						if (!input) {
+							fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer input\n");
+							exit(1);
+						}
 						strcpy(input, argv[i]);
 						if (argv[i + 1] != NULL) {
 							output = (char*)malloc(strlen(argv[i + 1]) * sizeof(char));
+							if (!input) {
+								fprintf(stderr, "[main]: Nepodarilo sa alokovat pamat pre buffer output\n");
+								exit(1);
+							}
 							strcpy(output, argv[i + 1]);
 						}
 						else {
@@ -558,6 +669,7 @@ int main(int argc, char **argv) {
 							printf("Nacitanie spravy zabralo %lf ms.\n", time_spent);
 							printf("Pocet blokov: %llu\n", message.numBlocks);
 						}
+						//sifrovanie sukromnym alebo verejnym klucom, na zaklade nacitaneho kluca
 						if (flag) {
 							rsa_encrypt(priv->d, priv->n, bufSize, message, output);
 						}
@@ -566,7 +678,9 @@ int main(int argc, char **argv) {
 						}
 						return 0;
 					}
+					//spustenie modu desifrovania
 					else {
+						//desifrovanie sukromnym alebo verejnym klucom, na zaklade nacitaneho kluca
 						if (flag) {
 							rsa_decrypt(priv->d, priv->n, bufSize, input, output);
 						}
